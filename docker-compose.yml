@@ -1,0 +1,75 @@
+version: '3'
+
+services:
+    postgres:
+        image: postgres
+        expose:
+          - 5432
+        environment:
+          - POSTGRES_DB=rundeck342
+          - POSTGRES_USER=rundeck342
+          - POSTGRES_PASSWORD=rundeck342
+        volumes:
+          - $PWD/dbdata:/var/lib/postgresql/data
+
+    rundeck342:
+        hostname: rundeck342
+        #image: rundeck/rundeck:3.4.2
+        build: ./ansible
+        links:
+          - ldap
+          - postgres
+        tty: true
+        environment:
+            RUNDECK_JAAS_MODULES_0: JettyCombinedLdapLoginModule
+            RUNDECK_JAAS_LDAP_FLAG: sufficient
+            RUNDECK_JAAS_LDAP_PROVIDERURL: ldap://ldap:389
+            RUNDECK_JAAS_LDAP_BINDDN: cn=admin,dc=devops,dc=com
+            RUNDECK_JAAS_LDAP_BINDPASSWORD: Pass1234
+            RUNDECK_JAAS_LDAP_USERBASEDN: ou=users,dc=devops,dc=com
+            RUNDECK_JAAS_LDAP_ROLEBASEDN: ou=roles,dc=devops,dc=com
+
+            RUNDECK_JAAS_MODULES_1: PropertyFileLoginModule
+            RUNDECK_JAAS_FILE_FLAG: sufficient
+            #
+            RUNDECK_GRAILS_URL: http://127.0.0.1:4440
+            RUNDECK_LOGGING_STRATEGY: FILE
+            #
+            RUNDECK_DATABASE_DRIVER: org.postgresql.Driver
+            RUNDECK_DATABASE_USERNAME: rundeck342
+            RUNDECK_DATABASE_PASSWORD: rundeck342
+            RUNDECK_DATABASE_URL: jdbc:postgresql://postgres/rundeck342?autoReconnect=true&useSSL=false&allowPublicKeyRetrieval=true
+
+        volumes:
+          - $PWD/rundeck-data:/home/rundeck/server/data
+          - $PWD/rundeck-config:/home/rundeck/server/config
+          - $PWD/rundeck-logs:/home/rundeck/server/logs
+          - $PWD/rundeck-acl:/home/rundeck/etc
+          - $PWD/rundeck-libext:/home/rundeck/libext
+          - ${RUNDECK_LICENSE_FILE:-/dev/null}:/home/rundeck/etc/rundeckpro-license.key
+        ports:
+          - 4440:4440
+    ldap:
+        hostname: ldap
+        image: osixia/openldap:1.2.1
+        environment:
+          - LDAP_ORGANISATION=DevOps
+          - LDAP_DOMAIN=devops.com
+          - LDAP_ADMIN_PASSWORD=Pass1234
+        volumes:
+          - ./ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom:rw
+        ports:
+          - "389:389"
+        command: --copy-service
+
+    phpldapadmin:
+        image: osixia/phpldapadmin:latest
+        container_name: phpldapadmin
+        environment:
+                PHPLDAPADMIN_LDAP_HOSTS: "ldap"
+                PHPLDAPADMIN_HTTPS: "false"
+        ports:
+                - "8080:80"
+        depends_on:
+                - ldap
+
